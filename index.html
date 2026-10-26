@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Run your own x86 operating system images in the browser with the v86 emulator. Upload .img and .iso files, which stream into private browser storage and are read sector by sector so even multi-gigabyte disks run on low-RAM machines. Includes save and load states, pause and resume, manual RAM sizing, and fullscreen with keyboard lock.">
+    <meta name="keywords" content="V86, x86 emulator, disk image, OPFS, browser emulator, retro computing, operating system emulation">
+    <meta name="author" content="V86 Web Interface">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://oses.ioblako.com/">
+    <meta property="og:title" content="V86 x86 Emulator - Boot Your Own Disk Images in the Browser">
+    <meta property="og:description" content="Boot your own .img and .iso disk images directly in the browser. Powered by WebAssembly.">
+    <meta property="og:image" content="https://oses.ioblako.com/assets/og-image.png">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://oses.ioblako.com/">
+    <meta property="twitter:title" content="V86 x86 Emulator - Boot Your Own Disk Images in the Browser">
+    <meta property="twitter:description" content="Boot your own .img and .iso disk images directly in the browser. Powered by WebAssembly.">
+    <meta property="twitter:image" content="https://oses.ioblako.com/assets/og-image.png">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://oses.ioblako.com/">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    
+    <!-- Schema.org structured data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "V86 x86 Emulator Web Interface",
+        "description": "Web-based x86 emulator running vintage operating systems in browser using WebAssembly",
+        "url": "https://oses.ioblako.com/",
+        "applicationCategory": "EmulatorApplication",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Person",
+            "name": "copy (Fabian Hemmer)"
+        },
+        "softwareVersion": "1.0",
+        "datePublished": "2025-09-18",
+        "programmingLanguage": ["JavaScript", "WebAssembly"],
+        "featureList": [
+            "x86 Processor Emulation",
+            "Bring-your-own disk images",
+            "Browser-based Execution",
+            "No Installation Required",
+            "Save and load states"
+        ]
+    }
+    </script>
+    
+    <title>V86 x86 Emulator - Boot Your Own Disk Images in the Browser</title>
+    <link rel="stylesheet" href="theme.css">
+    <style>
+        .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 22px 0; border-bottom: 1px solid var(--line-soft);
+        }
+        .brand { display: flex; align-items: center; gap: 12px; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: .04em; }
+        .brand-mark {
+            width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center;
+            background: var(--amber); color: #1b1307; font-family: var(--mono); font-size: 13px; font-weight: 500;
+        }
+        .topbar nav { display: flex; gap: 22px; font-size: 14px; }
+        .topbar nav a { color: var(--muted); text-decoration: none; }
+        .topbar nav a:hover { color: var(--text); }
+
+        /* ---------- hero: copy left, monitor right, monitor breaks the grid ---------- */
+        .hero {
+            display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center;
+            padding: 84px 0 96px;
+        }
+        .hero h1 {
+            font-family: var(--display); font-weight: 700; font-size: clamp(42px, 6vw, 76px);
+            line-height: .98; letter-spacing: -.01em; margin: 18px 0 22px;
+        }
+        .hero h1 em { font-style: normal; color: var(--amber); }
+        .hero p.lede { font-size: 18px; color: var(--muted); max-width: 520px; margin: 0 0 34px; }
+        .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+        .cta .btn { padding: 14px 22px; font-size: 15px; }
+        .cta small { color: var(--dim); font-family: var(--mono); font-size: 12px; flex-basis: 100%; margin-top: 6px; }
+
+        .monitor {
+            position: relative; transform: rotate(1.4deg) translateX(18px);
+            background: linear-gradient(180deg, #2b251d, #1c1813);
+            border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 40px;
+            box-shadow: 0 40px 80px -30px rgba(0,0,0,.8), 0 0 0 6px rgba(0,0,0,.25);
+        }
+        .monitor::after {
+            content: "V86 / OPFS"; position: absolute; left: 22px; bottom: 12px;
+            font-family: var(--mono); font-size: 11px; letter-spacing: .2em; color: var(--dim);
+        }
+        .monitor .led { position: absolute; right: 24px; bottom: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: blink 2.4s infinite; }
+        .crt {
+            position: relative; overflow: hidden; border-radius: 10px; aspect-ratio: 4 / 3;
+            background: radial-gradient(ellipse at center, #1b2016 0%, #0d0f0b 100%);
+            padding: 22px 24px; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--green);
+        }
+        .crt::after {
+            content: ""; position: absolute; inset: 0; pointer-events: none;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px);
+        }
+        .crt .ln { opacity: 0; animation: type .01s forwards; white-space: pre; }
+        .crt .ok { color: var(--amber); }
+        .crt .cur { display: inline-block; width: 8px; height: 15px; background: var(--green); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+        @keyframes type { to { opacity: 1; } }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .hero > * { animation: rise .7s var(--ease) both; }
+        .hero > *:nth-child(2) { animation-delay: .15s; }
+        @keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+        .hero .monitor { animation-name: rise-tilt; }
+        @keyframes rise-tilt { from { opacity: 0; transform: rotate(3deg) translate(18px, 30px); } }
+
+        /* ---------- specs: asymmetric numbered list ---------- */
+        .specs { padding: 20px 0 90px; display: grid; grid-template-columns: 300px 1fr; gap: 60px; }
+        .specs-intro h2 { font-family: var(--display); font-size: 32px; line-height: 1.1; margin: 14px 0 14px; }
+        .specs-intro p { color: var(--muted); margin: 0; }
+        .spec-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+        .spec {
+            padding: 26px 26px 28px 0; border-bottom: 1px solid var(--line);
+            display: grid; grid-template-columns: 44px 1fr; gap: 6px 14px;
+        }
+        .spec:nth-child(odd) { border-right: 1px solid var(--line); }
+        .spec:nth-child(even) { padding-left: 26px; }
+        .spec .n { font-family: var(--mono); color: var(--amber); font-size: 13px; padding-top: 3px; }
+        .spec h3 { font-family: var(--display); font-size: 18px; margin: 0; font-weight: 600; }
+        .spec p { grid-column: 2; margin: 0; color: var(--muted); font-size: 14.5px; }
+        .spec.wide { grid-column: 1 / -1; border-right: 0; padding-left: 0; background: linear-gradient(90deg, var(--amber-soft), transparent 70%); padding: 26px 26px 28px 14px; }
+
+        /* ---------- steps strip ---------- */
+        .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-bottom: 90px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+        .step { padding: 26px 28px; position: relative; }
+        .step + .step { border-left: 1px dashed var(--line); }
+        .step b { font-family: var(--display); font-size: 15px; display: block; margin: 8px 0 4px; }
+        .step span { color: var(--muted); font-size: 14px; }
+
+        footer { border-top: 1px solid var(--line-soft); padding: 34px 0 48px; color: var(--muted); font-size: 14px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; }
+        footer p { margin: 4px 0; }
+        footer .links { display: flex; flex-direction: column; gap: 4px; text-align: right; }
+
+        @media (max-width: 900px) {
+            .hero { grid-template-columns: 1fr; padding: 54px 0 64px; gap: 44px; }
+            .monitor { transform: none; }
+            .specs { grid-template-columns: 1fr; gap: 28px; }
+            .steps { grid-template-columns: 1fr; }
+            .step + .step { border-left: 0; border-top: 1px dashed var(--line); }
+        }
+        @media (max-width: 640px) {
+            .wrap { padding: 0 18px; }
+            .topbar nav { display: none; }
+            .spec-list { grid-template-columns: 1fr; }
+            .spec, .spec:nth-child(even) { border-right: 0; padding-left: 0; }
+            footer { grid-template-columns: 1fr; }
+            footer .links { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <header class="topbar">
+            <div class="brand"><span class="brand-mark">x86</span>V86 Emulator</div>
+            <nav>
+                <a href="#specs">Features</a>
+                <a href="#how">How it works</a>
+                <a href="https://github.com/copy/v86" target="_blank" rel="noopener">v86 on GitHub</a>
+            </nav>
+        </header>
+
+        <section class="hero">
+            <div>
+                <div class="eyebrow">x86 PC in a browser tab</div>
+                <h1>Boot <em>your own</em> disk images. No install.</h1>
+                <p class="lede">Upload an <span class="mono">.img</span> or <span class="mono">.iso</span> and it boots in a full x86 machine compiled to WebAssembly. Disks stay on storage and are read sector by sector, so a 1.5&nbsp;GB XP image or an 8&nbsp;GB Linux disk runs on a Chromebook without exhausting memory.</p>
+                <div class="cta">
+                    <a href="opfs.html" class="btn btn-primary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>
+                        Upload Custom OS
+                    </a>
+                    <a href="#how" class="btn btn-ghost">How it works</a>
+                    <small>Works best in Chrome, Edge or another Chromium browser.</small>
+                </div>
+            </div>
+            <div class="monitor" aria-hidden="true">
+                <div class="crt">
+                    <div class="ln" style="animation-delay:.5s">SeaBIOS (version 1.16)</div>
+                    <div class="ln" style="animation-delay:.9s">Memory: <span class="ok">512 MB</span> allocated</div>
+                    <div class="ln" style="animation-delay:1.3s">OPFS  active_disk.img  <span class="ok">[sync handle]</span></div>
+                    <div class="ln" style="animation-delay:1.7s">ATA0  sector size 512  <span class="ok">OK</span></div>
+                    <div class="ln" style="animation-delay:2.1s">Heap use for disk ....... <span class="ok">256 KB</span></div>
+                    <div class="ln" style="animation-delay:2.5s">Booting from Hard Disk...</div>
+                    <div class="ln" style="animation-delay:2.9s"> </div>
+                    <div class="ln" style="animation-delay:3.1s">C:\&gt; <span class="cur"></span></div>
+                </div>
+                <span class="led"></span>
+            </div>
+        </section>
+
+        <section class="specs" id="specs">
+            <div class="specs-intro">
+                <div class="eyebrow">What's inside</div>
+                <h2>Made for big disks and small laptops.</h2>
+                <p>The emulator runs in its own worker thread and keeps disk images out of RAM, so the tab stays responsive.</p>
+            </div>
+            <ul class="spec-list">
+                <li class="spec wide"><span class="n">01</span><h3>Zero-heap disk access</h3><p>Images are copied into the browser's private file system in chunks. The emulator reads and writes 512-byte sectors directly on that file through a small reused buffer and never holds the whole image in memory.</p></li>
+                <li class="spec"><span class="n">02</span><h3>Save &amp; load states</h3><p>Save a snapshot of the running machine to a <span class="mono">.bin</span> file you choose, then restore it later. Nothing is saved automatically.</p></li>
+                <li class="spec"><span class="n">03</span><h3>Pause &amp; resume</h3><p>Freeze the CPU at any moment. Disk writes are flushed when you pause.</p></li>
+                <li class="spec"><span class="n">04</span><h3>RAM, your call</h3><p>Type the exact number of megabytes the VM gets, from 16 MB to 3 GB.</p></li>
+                <li class="spec"><span class="n">05</span><h3>Fullscreen + keyboard lock</h3><p>Go fullscreen and keys like Esc, Alt+Tab and the Windows key go to the VM instead of your browser.</p></li>
+                <li class="spec"><span class="n">06</span><h3>Swap drives</h3><p>Switch between images, or add a second disk and a CD-ROM. A swap does a clean restart on the new disk.</p></li>
+                <li class="spec"><span class="n">07</span><h3>Real input</h3><p>Pointer-lock mouse, scancode-accurate keyboard, and a special-keys menu with Ctrl+Alt+Del.</p></li>
+            </ul>
+        </section>
+
+        <section class="steps" id="how">
+            <div class="step"><span class="eyebrow">Step 1</span><b>Upload an image</b><span>Pick or drop a .img or .iso. It's copied into browser storage once.</span></div>
+            <div class="step"><span class="eyebrow">Step 2</span><b>Set the hardware</b><span>Choose RAM, video memory, boot order and an optional second disk.</span></div>
+            <div class="step"><span class="eyebrow">Step 3</span><b>Press Play</b><span>Click the screen to capture the mouse, or go fullscreen.</span></div>
+        </section>
+
+        <footer>
+            <div>
+                <p>Powered by <a href="https://github.com/copy/v86" target="_blank" rel="noopener">v86</a> by <strong>copy (Fabian Hemmer)</strong>.</p>
+                <p>For educational and preservation use. Bring images you have the rights to.</p>
+                <p>Contact: <a href="mailto:info@iOblako.com">info@iOblako.com</a></p>
+            </div>
+            <div class="links">
+                <a href="https://github.com/TheEvalon/x86" target="_blank" rel="noopener">github.com/TheEvalon/x86</a>
+                <a href="https://games.ioblako.com" target="_blank" rel="noopener">games.ioblako.com</a>
+                <a href="readme.md">Documentation</a>
+                <a href="main.html">Classic uploader</a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

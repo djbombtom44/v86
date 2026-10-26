@@ -1,0 +1,139 @@
+/*
+ * theme.css - shared look for every page: a warm, dark "bench equipment" panel
+ * with amber phosphor accents. Pages add their own layout on top of these tokens.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+    --bg: #12100d;
+    --bg-2: #191612;
+    --panel: #1e1a15;
+    --panel-2: #26211a;
+    --line: #3a3329;
+    --line-soft: #2b261f;
+    --text: #ece3d1;
+    --muted: #9b907b;
+    --dim: #6d6455;
+    --amber: #e8a33d;
+    --amber-soft: rgba(232, 163, 61, 0.14);
+    --green: #93bd7c;
+    --green-soft: rgba(147, 189, 124, 0.14);
+    --red: #d46a4e;
+    --red-soft: rgba(212, 106, 78, 0.14);
+    --blue: #7fa7c2;
+    --radius: 10px;
+    --display: "Chakra Petch", "Trebuchet MS", sans-serif;
+    --body: "Atkinson Hyperlegible", "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    background:
+        radial-gradient(1100px 520px at 88% -10%, rgba(232, 163, 61, 0.10), transparent 60%),
+        radial-gradient(800px 480px at -10% 110%, rgba(147, 189, 124, 0.07), transparent 60%),
+        linear-gradient(var(--bg), var(--bg));
+    background-attachment: fixed;
+}
+
+/* faint engineering grid + grain on a fixed, non-interactive layer */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(236, 227, 209, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(236, 227, 209, 0.025) 1px, transparent 1px),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 48px 48px, 48px 48px, 160px 160px;
+}
+
+a { color: var(--amber); }
+a:hover { color: #f4c27a; }
+
+::selection { background: var(--amber); color: var(--bg); }
+
+.eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--amber);
+}
+
+.mono { font-family: var(--mono); }
+
+/* ---------- buttons ---------- */
+.btn, button {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: .03em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform .15s var(--ease), background .15s, border-color .15s, color .15s, box-shadow .15s;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+.btn:hover:not(:disabled), button:hover:not(:disabled) {
+    border-color: var(--muted);
+    transform: translateY(-1px);
+}
+.btn:active:not(:disabled), button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+}
+.btn:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+}
+button:disabled, .btn[aria-disabled="true"] {
+    opacity: .42;
+    cursor: not-allowed;
+}
+.btn svg, button svg { width: 16px; height: 16px; flex: none; }
+
+.btn-primary { background: var(--amber); border-color: var(--amber); color: #1b1307; }
+.btn-primary:hover:not(:disabled) { background: #f0b45a; border-color: #f0b45a; color: #1b1307; }
+.btn-go { background: var(--green-soft); border-color: rgba(147, 189, 124, .5); color: var(--green); }
+.btn-warn { background: var(--amber-soft); border-color: rgba(232, 163, 61, .45); color: var(--amber); }
+.btn-danger { background: var(--red-soft); border-color: rgba(212, 106, 78, .45); color: var(--red); }
+.btn-ghost { background: transparent; box-shadow: none; }
+
+/* ---------- form fields ---------- */
+select, input[type=number], input[type=text] {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 11px;
+    transition: border-color .15s;
+}
+select:hover, input[type=number]:hover { border-color: var(--muted); }
+input[type=checkbox] { accent-color: var(--amber); width: 16px; height: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+}

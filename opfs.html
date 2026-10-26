@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V86 Emulator - Zero-Heap Disk (OPFS)</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+.app{display:grid;grid-template-columns:360px 1fr;min-height:100vh}
+.side{border-right:1px solid var(--line-soft);background:rgba(25,22,18,.82);padding:22px 22px 30px;display:flex;flex-direction:column;gap:22px;max-height:100vh;overflow:auto;position:sticky;top:0}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;letter-spacing:.04em;text-decoration:none;color:var(--text)}
+.brand-mark{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;background:var(--amber);color:#1b1307;font-family:var(--mono);font-size:12px}
+.brand small{display:block;font-family:var(--mono);font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.08em}
+.section-title{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+
+/* upload / drop zone */
+.drop{position:relative;border:1.5px dashed var(--line);border-radius:var(--radius);padding:18px;text-align:center;background:var(--bg-2);transition:border-color .2s,background .2s}
+.drop.over{border-color:var(--amber);background:var(--amber-soft)}
+.drop #upload-btn{width:100%;padding:13px}
+.drop p{margin:10px 0 0;font-size:13px;color:var(--muted)}
+.slot-pick{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px;color:var(--muted)}
+.slot-pick select{flex:1;padding:7px 9px;font-size:13px}
+
+/* drives */
+.drives{display:flex;flex-direction:column;gap:8px}
+.drive{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line-soft);border-radius:9px;background:var(--panel)}
+.drive.empty{opacity:.62}
+.drive .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--panel-2);color:var(--amber)}
+.drive.empty .ico{color:var(--dim)}
+.drive .ico svg{width:18px;height:18px}
+.drive .meta{min-width:0}
+.drive .slot{font-family:var(--display);font-size:13px;font-weight:600}
+.drive .name{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drive .acts{display:flex;gap:4px}
+.drive .acts button{padding:5px 8px;font-size:12px;box-shadow:none}
+.storage{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+.meter{height:4px;border-radius:2px;background:var(--line-soft);overflow:hidden;margin-top:6px}.meter i{display:block;height:100%;background:var(--amber);width:0;transition:width .4s var(--ease)}
+
+/* settings */
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fields label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted)}
+.fields label.full{grid-column:1/-1}
+.fields select,.fields input[type=number]{width:100%}
+.ram-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.ram-row button{padding:4px 9px;font-family:var(--mono);font-size:11.5px;font-weight:500;box-shadow:none}
+.check{flex-direction:row!important;align-items:center;gap:8px!important;color:var(--text)!important;font-size:13.5px!important}
+.hint{font-size:12px;color:var(--dim)}.hint.warn{color:var(--red)}
+
+/* main stage */
+.main{display:flex;flex-direction:column;min-width:0;padding:22px 26px 26px;gap:16px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.toolbar .sep{width:1px;height:26px;background:var(--line);margin:0 4px}
+.toolbar .spacer{flex:1}
+#play-pause-btn{min-width:118px}
+#play-pause-btn.is-running{background:var(--amber-soft);border-color:rgba(232,163,61,.5);color:var(--amber)}
+button.active{border-color:rgba(147,189,124,.55);color:var(--green);background:var(--green-soft)}
+.banner{padding:11px 14px;font-size:13.5px;border-radius:9px;border:1px solid}
+.banner.error{background:var(--red-soft);border-color:rgba(212,106,78,.4);color:#f0a691}
+.banner.warn{background:var(--amber-soft);border-color:rgba(232,163,61,.35);color:#f2c88a}
+
+#vm-stage{position:relative;flex:1;min-height:420px;border-radius:14px;border:1px solid var(--line);background:#0b0a08;display:flex;justify-content:center;align-items:center;overflow:hidden;box-shadow:0 30px 60px -30px rgba(0,0,0,.9) inset}
+#vm-stage::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55))}
+#screen_container{max-width:100%;color:#c8bfae;font:14px var(--mono);position:relative;cursor:pointer}
+#screen_container canvas{display:block;max-width:100%;height:auto}#screen_container canvas.upscaled{image-rendering:pixelated}
+.placeholder{padding:40px;text-align:center;max-width:440px}
+.placeholder .disk{width:64px;height:64px;margin:0 auto 18px;color:var(--amber);opacity:.85;animation:spin 9s linear infinite}
+.placeholder h2{font-family:var(--display);font-size:22px;margin:0 0 8px;color:var(--text)}
+.placeholder p{margin:0 0 18px;color:var(--muted);font-family:var(--body);font-size:14.5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#pause-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(18,16,13,.55);backdrop-filter:blur(2px);z-index:2;pointer-events:none}
+body[data-vm=paused] #pause-overlay{display:grid}
+#pause-overlay span{font-family:var(--display);font-size:15px;letter-spacing:.3em;color:var(--amber);border:1px solid rgba(232,163,61,.5);padding:10px 22px;border-radius:8px;background:rgba(18,16,13,.8)}
+
+#fs-bar{position:absolute;top:12px;left:50%;transform:translate(-50%,-140%);display:none;gap:6px;padding:6px;border-radius:10px;background:rgba(30,26,21,.92);border:1px solid var(--line);z-index:3;transition:transform .25s var(--ease)}
+#fs-bar button{padding:6px 10px;font-size:12.5px}
+#vm-stage:fullscreen{border:0;border-radius:0;background:#000}
+#vm-stage:fullscreen #fs-bar{display:flex}
+#vm-stage:fullscreen #fs-bar.show,#fs-bar:hover{transform:translate(-50%,0)}
+#vm-stage:fullscreen #screen_container{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+#vm-stage:fullscreen #screen_container canvas{width:100vw!important;height:100vh!important;max-width:none;object-fit:contain}
+
+.statusbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel);font-size:13.5px}
+.status{flex:1;min-width:220px;color:var(--text)}.status::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:9px;vertical-align:1px}
+.status.info::before{background:var(--green)}.status.error{color:#f0a691}.status.error::before{background:var(--red)}
+body[data-vm=running] .status.info::before{animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.capture-status{display:flex;gap:14px;font-family:var(--mono);font-size:12px;color:var(--muted);align-items:center}
+.status-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line);margin-right:5px}.status-indicator.active{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+#stats{color:var(--amber)}
+
+#progress-box{padding:12px 14px;border:1px solid rgba(232,163,61,.35);border-radius:10px;background:var(--amber-soft);display:flex;flex-direction:column;gap:8px}
+#progress-box[hidden]{display:none}
+progress{width:100%;height:6px;appearance:none;border:0;border-radius:3px;background:var(--line-soft);overflow:hidden}
+progress::-webkit-progress-bar{background:var(--line-soft)}progress::-webkit-progress-value{background:var(--amber)}progress::-moz-progress-bar{background:var(--amber)}
+#progress-text{font-family:var(--mono);font-size:12px;color:#f2c88a}
+.progress-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#cancel-btn{padding:4px 10px;font-size:12px}
+
+.special-keys-container{position:relative}
+.special-keys-menu{display:none;position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:290px;max-height:360px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 18px 40px rgba(0,0,0,.6);padding:4px}
+.special-keys-menu.show{display:block;animation:pop .16s var(--ease)}
+@keyframes pop{from{opacity:0;transform:translateY(-4px)}}
+.key-category{padding:8px 10px 4px;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.key-item{display:flex;justify-content:space-between;padding:7px 10px;cursor:pointer;font-size:13px;border-radius:6px}.key-item:hover{background:var(--panel-2)}.key-description{color:var(--dim)}
+.footnote{font-size:12px;color:var(--dim)}
+.footnote kbd{font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;color:var(--muted)}
+
+@media (max-width:980px){.app{grid-template-columns:1fr}.side{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line-soft)}.main{padding:18px}#vm-stage{min-height:300px}}
+</style></head><body>
+<div class="app">
+<aside class="side">
+  <a class="brand" href="index.html"><span class="brand-mark">x86</span><span>V86 Emulator<small>ZERO-HEAP DISK · OPFS</small></span></a>
+
+  <section>
+    <h3 class="section-title">Upload image</h3>
+    <div class="drop" id="drop-zone">
+      <button id="upload-btn" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>
+        Upload .img / .iso
+      </button>
+      <p>or drop a disk image here</p>
+      <div class="slot-pick"><span>Into</span><select id="slot-select"><option value="auto">Auto (.iso → CD-ROM, else HDA)</option><option value="hda">Hard disk (HDA)</option><option value="hdb">Second disk (HDB)</option><option value="cdrom">CD-ROM</option></select></div>
+    </div>
+  </section>
+
+  <section>
+    <h3 class="section-title">Drives</h3>
+    <div class="drives" id="drive-rows"></div>
+    <div class="storage" id="storage-estimate"></div>
+    <div class="meter"><i id="storage-meter"></i></div>
+  </section>
+
+  <section>
+    <h3 class="section-title">Hardware</h3>
+    <div class="fields">
+      <label class="full">RAM (MB)
+        <input type="number" id="ram-size" value="512" min="16" max="3072" step="1" inputmode="numeric">
+        <span class="ram-row" id="ram-presets"><button type="button" data-mb="128">128</button><button type="button" data-mb="256">256</button><button type="button" data-mb="512">512</button><button type="button" data-mb="1024">1024</button><button type="button" data-mb="2048">2048</button></span>
+      </label>
+      <div class="hint full" id="ram-hint" style="grid-column:1/-1"></div>
+      <label>Video memory<select id="video-memory"><option value="8">8 MB</option><option value="16">16 MB</option><option value="32" selected>32 MB</option><option value="64">64 MB</option></select></label>
+      <label>Boot order<select id="boot-order"><option value="hda-first">HDD first</option><option value="cdrom-first">CD-ROM first</option><option value="hda-only">HDD only</option><option value="cdrom-only">CD-ROM only</option></select></label>
+      <label class="full">Disk flush<select id="flush-mode"><option value="250" selected>Balanced (250 ms)</option><option value="0">After every write (safest, slower)</option><option value="1000">Relaxed (1 s)</option></select></label>
+      <label class="full check"><input type="checkbox" id="winnt-compat"> Windows NT compatibility</label>
+    </div>
+  </section>
+
+  <p class="footnote">Click the screen to capture the mouse. <kbd>Ctrl</kbd>+<kbd>Alt</kbd> releases it; <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd> releases the keyboard. Saved states don't contain the disk, so load them only onto the same disk contents.</p>
+</aside>
+
+<main class="main">
+  <div id="compat-banner" class="banner" hidden></div>
+
+  <div class="toolbar">
+    <button id="play-pause-btn" class="btn-go">▶ Play</button>
+    <button id="save-state-btn" disabled>Save State</button>
+    <button id="load-state-btn">Load State</button>
+    <span class="sep"></span>
+    <button id="switch-drive-btn" class="btn-warn">Switch Drive / Restart</button>
+    <button id="restart-btn" class="btn-danger">Restart</button>
+    <span class="spacer"></span>
+    <button id="mouse-capture-btn" disabled>Capture Mouse</button>
+    <button id="keyboard-capture-btn" disabled>Release Keyboard</button>
+    <div class="special-keys-container"><button id="special-keys-btn" disabled>Special Keys ▾</button><div id="special-keys-menu" class="special-keys-menu"></div></div>
+    <button id="fullscreen-btn" title="Fullscreen with keyboard lock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      Fullscreen
+    </button>
+  </div>
+
+  <div id="progress-box" hidden>
+    <div class="progress-head"><span id="progress-text"></span><button id="cancel-btn" class="btn-danger" hidden>Cancel copy</button></div>
+    <progress id="progress-bar"></progress>
+  </div>
+  <div class="hint" id="state-file-status"></div>
+
+  <div id="vm-stage">
+    <div id="fs-bar">
+      <button id="fs-cad-btn">Ctrl+Alt+Del</button>
+      <button id="fs-pause-btn">Pause</button>
+      <button id="fs-exit-btn" class="btn-warn">Exit fullscreen</button>
+    </div>
+    <div id="pause-overlay"><span>PAUSED</span></div>
+    <div id="screen_container"><div id="screen-placeholder" class="placeholder">
+      <svg class="disk" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2"><circle cx="32" cy="32" r="28"/><circle cx="32" cy="32" r="6"/><path d="M32 4a28 28 0 0 1 24 13" stroke-linecap="round"/></svg>
+      <h2>No machine running</h2>
+      <p>Upload a .img or .iso on the left, set the RAM you want, then press Play.</p>
+    </div></div>
+  </div>
+
+  <div class="statusbar">
+    <div class="status" id="status">Ready</div>
+    <div class="capture-status"><span><span class="status-indicator" id="mouse-status"></span>Mouse</span><span><span class="status-indicator" id="keyboard-status"></span>Keyboard</span><span id="stats"></span></div>
+  </div>
+</main>
+</div>
+<script src="opfs-main.js"></script></body></html>

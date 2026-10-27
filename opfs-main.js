@@ -13,7 +13,32 @@
 const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "Digit4": 5, "Digit5": 6, "Digit6": 7, "Digit7": 8, "Digit8": 9, "Digit9": 10, "Digit0": 11, "Minus": 12, "Equal": 13, "Backspace": 14, "Tab": 15, "KeyQ": 16, "KeyW": 17, "KeyE": 18, "KeyR": 19, "KeyT": 20, "KeyY": 21, "KeyU": 22, "KeyI": 23, "KeyO": 24, "KeyP": 25, "BracketLeft": 26, "BracketRight": 27, "Enter": 28, "ControlLeft": 29, "KeyA": 30, "KeyS": 31, "KeyD": 32, "KeyF": 33, "KeyG": 34, "KeyH": 35, "KeyJ": 36, "KeyK": 37, "KeyL": 38, "Semicolon": 39, "Quote": 40, "Backquote": 41, "ShiftLeft": 42, "Backslash": 43, "KeyZ": 44, "KeyX": 45, "KeyC": 46, "KeyV": 47, "KeyB": 48, "KeyN": 49, "KeyM": 50, "Comma": 51, "Period": 52, "Slash": 53, "IntlRo": 53, "ShiftRight": 54, "NumpadMultiply": 55, "AltLeft": 56, "Space": 57, "CapsLock": 58, "F1": 59, "F2": 60, "F3": 61, "F4": 62, "F5": 63, "F6": 64, "F7": 65, "F8": 66, "F9": 67, "F10": 68, "NumLock": 69, "ScrollLock": 70, "Numpad7": 71, "Numpad8": 72, "Numpad9": 73, "NumpadSubtract": 74, "Numpad4": 75, "Numpad5": 76, "Numpad6": 77, "NumpadAdd": 78, "Numpad1": 79, "Numpad2": 80, "Numpad3": 81, "Numpad0": 82, "NumpadDecimal": 83, "IntlBackslash": 86, "F11": 87, "F12": 88, "NumpadEnter": 57372, "ControlRight": 57373, "NumpadDivide": 57397, "AltRight": 57400, "Home": 57415, "ArrowUp": 57416, "PageUp": 57417, "ArrowLeft": 57419, "ArrowRight": 57421, "End": 57423, "ArrowDown": 57424, "PageDown": 57425, "Insert": 57426, "Delete": 57427, "MetaLeft": 57435, "OSLeft": 57435, "MetaRight": 57436, "OSRight": 57436, "ContextMenu": 57437};
 
 
-    const OPFS_FILES = { hda: "active_disk.img", hdb: "active_disk_b.img", cdrom: "active_cdrom.iso" };
+    const LEGACY_FILES = { hda: "active_disk.img", hdb: "active_disk_b.img", cdrom: "active_cdrom.iso" };
+    const ACTIVE_KEY = "v86opfs.active.v2";
+    // Which OPFS file each slot currently uses. "" = ejected. Falls back to the legacy fixed names.
+    const OPFS_FILES = {
+        get hda() { return activeName("hda"); },
+        get hdb() { return activeName("hdb"); },
+        get cdrom() { return activeName("cdrom"); },
+    };
+    function activeName(slot) {
+        const m = lsGet(ACTIVE_KEY) || {};
+        return m[slot] !== undefined ? m[slot] : LEGACY_FILES[slot];
+    }
+    function setActive(slot, name) {
+        const m = lsGet(ACTIVE_KEY) || {};
+        m[slot] = name || "";
+        lsSet(ACTIVE_KEY, m);
+    }
+    async function listOpfsFiles() {
+        const root = await opfsRoot();
+        const out = [];
+        for await (const [name, h] of root.entries()) {
+            if (h.kind !== "file" || name === STATE_TMP_NAME) continue;
+            try { out.push({ name, size: (await h.getFile()).size }); } catch (e) { out.push({ name, size: 0 }); }
+        }
+        return out.sort((a, b) => a.name.localeCompare(b.name));
+    }
     const SLOT_LABELS = { hda: "Hard disk (HDA)", hdb: "Second disk (HDB)", cdrom: "CD-ROM" };
     const META_KEY = "v86opfs.meta.v1";
     const SETTINGS_KEY = "v86opfs.settings.v1";
@@ -119,7 +144,9 @@ const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "D
     async function opfsSize(slot) {
         try {
             const root = await opfsRoot();
-            const fh = await root.getFileHandle(OPFS_FILES[slot]);
+            const n = OPFS_FILES[slot];
+            if (!n) return null;
+            const fh = await root.getFileHandle(n);
             return (await fh.getFile()).size;
         } catch (e) { return null; }
     }
@@ -176,40 +203,134 @@ const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "D
 
     async function refreshDrives() {
         if (!caps.opfs) return;
-        const meta = getMeta();
+        const files = await listOpfsFiles();
         el.drives.textContent = "";
+        const busy = vm === "busy" || vm === "starting";
         for (const slot of ["hda", "hdb", "cdrom"]) {
             const size = await opfsSize(slot);
+            const cur = OPFS_FILES[slot];
             const card = document.createElement("div");
             card.className = "drive" + (size == null ? " empty" : "");
             card.innerHTML = '<div class="ico"></div><div class="meta"><div class="slot"></div><div class="name"></div></div><div class="acts"></div>';
             card.querySelector(".ico").innerHTML = slot === "cdrom" ? DRIVE_ICONS.cd : DRIVE_ICONS.disk;
             card.querySelector(".slot").textContent = SLOT_LABELS[slot];
             const name = card.querySelector(".name");
-            if (size == null) name.textContent = "Empty";
-            else {
-                name.textContent = `${(meta[slot] && meta[slot].name) || OPFS_FILES[slot]} · ${fmtBytes(size)}`;
-                name.title = `Stored as ${OPFS_FILES[slot]} in browser storage`;
-            }
+            name.textContent = size == null ? "Empty" : `${cur} · ${fmtBytes(size)}`;
             const acts = card.querySelector(".acts");
+            const sel = document.createElement("select");
+            sel.title = `Choose which stored image the ${SLOT_LABELS[slot]} uses`;
+            sel.disabled = busy;
+            sel.style.maxWidth = "170px";
+            const none = document.createElement("option");
+            none.value = ""; none.textContent = "— Empty —";
+            sel.appendChild(none);
+            for (const f of files) {
+                const o = document.createElement("option");
+                o.value = f.name; o.textContent = `${f.name} (${fmtBytes(f.size)})`;
+                if (f.name === cur) o.selected = true;
+                sel.appendChild(o);
+            }
+            if (size == null) sel.value = "";
+            sel.addEventListener("change", () => selectFile(slot, sel.value));
+            acts.appendChild(sel);
             const up = document.createElement("button");
-            up.textContent = size == null ? "Upload" : "Replace";
-            up.title = `Upload a .img or .iso into the ${SLOT_LABELS[slot]} slot`;
-            up.disabled = vm === "busy" || vm === "starting";
+            up.textContent = "Upload";
+            up.title = `Upload a new .img or .iso into the ${SLOT_LABELS[slot]} slot (existing files are kept)`;
+            up.disabled = busy;
             up.addEventListener("click", () => uploadDisk(slot));
             acts.appendChild(up);
-            if (size != null && slot !== "hda") {
-                const b = document.createElement("button");
-                b.className = "btn-danger";
-                b.textContent = "Remove";
-                b.disabled = vm !== "idle";
-                b.title = vm === "idle" ? "Delete this image from browser storage" : "Stop the VM first (Switch Drive / Restart)";
-                b.addEventListener("click", () => removeSlot(slot));
-                acts.appendChild(b);
-            }
             el.drives.appendChild(card);
         }
+
+        // Stored files library: download / delete anything in OPFS
+        const lib = document.createElement("div");
+        lib.className = "file-library";
+        lib.style.cssText = "margin-top:6px;display:flex;flex-direction:column;gap:6px";
+        const h = document.createElement("div");
+        h.className = "slot";
+        h.style.cssText = "font-size:13px;font-weight:600";
+        h.textContent = `Stored files (${files.length})`;
+        lib.appendChild(h);
+        if (!files.length) {
+            const e = document.createElement("div");
+            e.className = "hint"; e.textContent = "No files stored yet.";
+            lib.appendChild(e);
+        }
+        for (const f of files) {
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--line-soft);border-radius:8px;background:var(--panel)";
+            const used = ["hda", "hdb", "cdrom"].filter((s) => OPFS_FILES[s] === f.name).map((s) => s.toUpperCase());
+            const label = document.createElement("div");
+            label.style.cssText = "min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px";
+            label.textContent = `${f.name} · ${fmtBytes(f.size)}` + (used.length ? `  [in use: ${used.join(", ")}]` : "");
+            label.title = f.name;
+            const act = document.createElement("div");
+            act.style.cssText = "display:flex;gap:4px;flex:none";
+            const dl = document.createElement("button");
+            dl.textContent = "Download";
+            dl.title = "Save a copy of this file to your computer (backup)";
+            dl.disabled = busy;
+            dl.addEventListener("click", () => downloadFile(f.name));
+            const del = document.createElement("button");
+            del.className = "btn-danger";
+            del.textContent = "Delete";
+            del.disabled = vm !== "idle";
+            del.title = vm === "idle" ? "Delete this file from browser storage" : "Stop the VM first (Switch Drive / Restart)";
+            del.addEventListener("click", () => deleteFile(f.name));
+            act.append(dl, del);
+            row.append(label, act);
+            lib.appendChild(row);
+        }
+        el.drives.appendChild(lib);
         await refreshStorageEstimate();
+    }
+
+    async function selectFile(slot, name) {
+        if ((name || "") === (OPFS_FILES[slot] || "")) return;
+        const wasActive = vm === "running" || vm === "paused";
+        if (wasActive && !confirm(`Changing the ${SLOT_LABELS[slot]} restarts the running VM. Continue?`)) { await refreshDrives(); return; }
+        setVm("busy");
+        if (wasActive) { info("Stopping the VM…"); await destroyWorker(); el.stats.textContent = ""; }
+        setActive(slot, name);
+        await refreshDrives();
+        if (wasActive) { pendingState = null; updateStateFileStatus(); await startVM(); }
+        else { setVm("idle"); info(name ? `${name} selected for ${SLOT_LABELS[slot]}.` : `${SLOT_LABELS[slot]} ejected.`); }
+    }
+
+    async function downloadFile(name) {
+        try {
+            const root = await opfsRoot();
+            const fh = await root.getFileHandle(name);
+            const file = await fh.getFile();
+            if (window.showSaveFilePicker) {
+                const out = await window.showSaveFilePicker({ suggestedName: name });
+                const w = await out.createWritable();
+                await file.stream().pipeTo(w);
+                info(`Saved ${name}.`);
+            } else {
+                const url = URL.createObjectURL(file);
+                const a = document.createElement("a");
+                a.href = url; a.download = name;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 600000);
+                info(`Downloading ${name}…`);
+            }
+        } catch (e) {
+            if (isAbort(e)) return;
+            err(`Could not download "${name}": ${(e && e.message) || e}. If the VM is running, pause/stop it and try again.`);
+        }
+    }
+
+    async function deleteFile(name) {
+        if (vm !== "idle") return;
+        if (!confirm(`Permanently delete "${name}" from browser storage? Download it first if you want a backup.`)) return;
+        try {
+            const root = await opfsRoot();
+            await root.removeEntry(name);
+        } catch (e) { err(`Could not delete "${name}": ${(e && e.message) || e}`); }
+        for (const s of ["hda", "hdb", "cdrom"]) if (OPFS_FILES[s] === name) setActive(s, "");
+        await refreshDrives();
+        updateButtons();
     }
 
     async function refreshStorageEstimate() {
@@ -219,18 +340,6 @@ const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "D
             box.textContent = `Browser storage: ${fmtBytes(e.usage)} used of ~${fmtBytes(e.quota)} available`;
             el.meter.style.width = (e.quota ? Math.min(100, (e.usage / e.quota) * 100) : 0).toFixed(1) + "%";
         } catch (e) { box.textContent = ""; }
-    }
-
-    async function removeSlot(slot) {
-        if (vm !== "idle") return;
-        if (!confirm(`Delete the ${SLOT_LABELS[slot]} image from browser storage?`)) return;
-        try {
-            const root = await opfsRoot();
-            await root.removeEntry(OPFS_FILES[slot]);
-        } catch (e) { /* already gone */ }
-        setMeta(slot, null);
-        await refreshDrives();
-        updateButtons();
     }
 
     /* ----------------------------------------------------------------- *
@@ -362,35 +471,40 @@ const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "D
 
     async function mirrorToOpfs(slot, file) {
         const root = await opfsRoot();
-        const fileName = OPFS_FILES[slot];
+        let fileName = file.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_") || "image.img";
+        if (fileName === STATE_TMP_NAME) fileName = "image_" + fileName;
 
-        // Same image already mirrored? Offer to keep it (it holds the VM's own writes) instead of re-copying GBs.
-        const meta = getMeta()[slot];
-        const existing = await opfsSize(slot);
-        if (meta && existing === file.size && meta.name === file.name && meta.size === file.size && meta.lastModified === file.lastModified) {
+        // Same name already stored? Keep it (it holds the VM's own writes), overwrite it, or store under a new name.
+        const existing = await (async () => { try { return (await (await root.getFileHandle(fileName)).getFile()).size; } catch (e) { return null; } })();
+        let deleteOldFirst = false;
+        if (existing != null) {
             const keep = confirm(
-                `"${file.name}" is already mirrored in browser storage (including any changes the VM made to it).\n\n` +
-                `OK = keep the existing copy and continue.\nCancel = overwrite it with a fresh copy of the original file.`);
-            if (keep) return { copied: false };
+                `"${fileName}" already exists in browser storage (${fmtBytes(existing)}), including any changes the VM made to it.\n\n` +
+                `OK = keep the existing copy and use it.\nCancel = choose between overwriting or saving under a new name.`);
+            if (keep) { setActive(slot, fileName); return { copied: false }; }
+            if (!confirm(`Overwrite "${fileName}" with the new file?\n\nOK = overwrite.\nCancel = keep both (new copy gets a different name).`)) {
+                const dot = fileName.lastIndexOf(".");
+                const stem = dot > 0 ? fileName.slice(0, dot) : fileName, ext = dot > 0 ? fileName.slice(dot) : "";
+                fileName = `${stem}_${Date.now().toString(36)}${ext}`;
+            }
         }
+        const overwriting = existing != null && fileName === file.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_");
 
-        // Quota check. A writable stream is committed on close, so the old copy normally coexists with the new one.
+        // Quota check. A writable stream is committed on close, so an old copy normally coexists with the new one.
         let freeSpace = null;
         try { const e = await navigator.storage.estimate(); freeSpace = e.quota - e.usage; } catch (e) { /* unknown */ }
-        let deleteOldFirst = false;
         if (freeSpace != null && freeSpace < file.size * 1.02) {
-            if (existing != null && freeSpace + existing >= file.size * 1.02) {
-                if (!confirm(`Not enough browser storage to keep the current ${SLOT_LABELS[slot]} while copying the new one.\n` +
+            if (overwriting && freeSpace + existing >= file.size * 1.02) {
+                if (!confirm(`Not enough browser storage to keep the current copy while copying the new one.\n` +
                     `The current copy will be deleted first. Continue?`)) throw new DOMException("Cancelled", "AbortError");
                 deleteOldFirst = true;
             } else {
                 throw new Error(`Not enough browser storage: need ${fmtBytes(file.size)}, only ~${fmtBytes(freeSpace)} free. ` +
-                    `Free some disk space or remove other site data and try again.`);
+                    `Delete or download-and-delete some stored files and try again.`);
             }
         }
         if (deleteOldFirst) {
             try { await root.removeEntry(fileName); } catch (e) { /* absent */ }
-            setMeta(slot, null);
         }
 
         // Ask the browser not to evict our (large) data under storage pressure. Best effort.
@@ -423,7 +537,7 @@ const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "D
             busyAbort = null;
             el.cancel.hidden = true;
         }
-        setMeta(slot, { name: file.name, size: file.size, lastModified: file.lastModified, mirroredAt: Date.now() });
+        setActive(slot, fileName);
         return { copied: true };
     }
 

@@ -173,10 +173,11 @@ async function openDisk(root, fileName, opts) {
  * init
  * ------------------------------------------------------------------------- */
 const BOOT_ORDERS = {
-    "hda-first": 0x213,
-    "cdrom-first": 0x123,
-    "hda-only": 0x200,
-    "cdrom-only": 0x100,
+    // v86/SeaBIOS boot_order nibbles are read LOW to HIGH: 1 = floppy, 2 = hard disk, 3 = CD-ROM.
+    "hda-first": 0x312,     // HDD, floppy, CD-ROM
+    "cdrom-first": 0x123,   // CD-ROM, HDD, floppy
+    "hda-only": 0x002,      // HDD only
+    "cdrom-only": 0x003,    // CD-ROM only
 };
 
 async function init({ base, canvas, config }) {

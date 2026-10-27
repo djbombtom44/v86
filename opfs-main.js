@@ -18,7 +18,7 @@ const CODE_TO_SCANCODE = {"Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "D
     const META_KEY = "v86opfs.meta.v1";
     const SETTINGS_KEY = "v86opfs.settings.v1";
     const STATE_TMP_NAME = "state_download_tmp.bin";
-    const RAM_MIN_MB = 16, RAM_MAX_MB = 3072;
+    const RAM_MIN_MB = 16, RAM_MAX_MB = 4095;
 
     const $ = (id) => document.getElementById(id);
     const el = {
